@@ -183,11 +183,40 @@
 
   /* 피버 게이지 & 피버 타임 */
   #feverWrap {
-    position: absolute; top: 60px; left: 50%; transform: translateX(-50%);
-    width: 200px; height: 10px; background: rgba(0,0,0,.45);
+    position: absolute; top: 58px; left: 50%; transform: translateX(-50%);
+    width: 170px; height: 18px; background: rgba(0,0,0,.5);
+    border: 1.5px solid rgba(255,255,255,.22);
     border-radius: 999px; overflow: hidden; z-index: 6; pointer-events: none;
   }
-  #fever { height: 100%; width: 0%; background: linear-gradient(90deg,#ffd93d,#ff6b6b); transition: width .2s; }
+  #fever { height: 100%; width: 0%; background: linear-gradient(90deg,#ffd93d,#ff8c42,#ff6b6b); transition: width .2s; }
+  #feverWrap .flabel {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    font-size: 10px; font-weight: 900; letter-spacing: 2.5px;
+    color: rgba(255,255,255,.92); text-shadow: 0 1px 3px rgba(0,0,0,.9);
+  }
+  #feverWrap.full { border-color: #ffd93d; animation: gaugeGlow .45s infinite alternate; }
+  @keyframes gaugeGlow { from { box-shadow: 0 0 5px #ffd93d; } to { box-shadow: 0 0 18px #ffd93d; } }
+
+  /* 🔥 피버 타임 대문짝 배너 */
+  #feverBanner {
+    position: absolute; left: 50%; top: 36%;
+    transform: translate(-50%,-50%);
+    font-size: clamp(44px, 10vw, 120px); font-weight: 900;
+    white-space: nowrap; z-index: 9; pointer-events: none; opacity: 0;
+    color: #ffd93d;
+    -webkit-text-stroke: 3px #a52310;
+    paint-order: stroke fill;
+    text-shadow: 0 0 34px #ff6b6b, 0 8px 0 #7a1500, 0 12px 24px rgba(0,0,0,.6);
+  }
+  #feverBanner.show { animation: feverSlam 1.8s cubic-bezier(.2,.8,.3,1) forwards; }
+  @keyframes feverSlam {
+    0%   { opacity: 0; transform: translate(-50%,-50%) scale(3.2) rotate(-8deg); }
+    16%  { opacity: 1; transform: translate(-50%,-50%) scale(1)   rotate(2deg);  }
+    28%  { transform: translate(-50%,-50%) scale(1.12) rotate(-1.5deg); }
+    40%  { transform: translate(-50%,-50%) scale(1.04) rotate(0.5deg); }
+    78%  { opacity: 1; }
+    100% { opacity: 0; transform: translate(-50%,-50%) scale(1.25); }
+  }
   #stage.fever::after {
     content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 3;
     background: linear-gradient(180deg, rgba(255,107,107,.20), rgba(255,217,61,.14));
@@ -238,7 +267,8 @@
       <div class="pill off" id="comboPill">🔥 x1</div>
       <div class="pill" id="timePill">⏱️ <span id="time">30</span>s</div>
     </div>
-    <div id="feverWrap"><div id="fever"></div></div>
+    <div id="feverWrap"><div id="fever"></div><div class="flabel">FEVER</div></div>
+    <div id="feverBanner">🔥 FEVER TIME 🔥</div>
 
     <div id="overlayMsg">
       <h2>햄버거 폭우 🍔</h2>
@@ -269,6 +299,8 @@ const timeEl  = document.getElementById('time');
 const comboEl = document.getElementById('comboPill');
 const feverEl = document.getElementById('fever');
 const scorePill = document.getElementById('scorePill');
+const feverWrap = document.getElementById('feverWrap');
+const feverBanner = document.getElementById('feverBanner');
 const timePill= document.getElementById('timePill');
 const overlay = document.getElementById('overlayMsg');
 const startBtn= document.getElementById('startBtn');
@@ -454,7 +486,8 @@ function chomp() {
       feverUntil = performance.now() + 6000;   // 🔥 6초 피버 타임!
       fever = 0;
       sfx('star'); shake();
-      popText('🔥 피버 타임!! 🍔🍔🍔', true);
+      feverBanner.classList.remove('show'); void feverBanner.offsetWidth;
+      feverBanner.classList.add('show');
     }
   }
 
@@ -540,6 +573,8 @@ function loop() {
   if (frame % Math.round(spawnEvery) === 0) spawnDrop();
   stage.classList.toggle('fever', feverOn);
   feverEl.style.width = (feverOn ? 100 : fever) + '%';
+  feverWrap.classList.toggle('full', feverOn || fever >= 75);
+  feverWrap.querySelector('.flabel').textContent = feverOn ? 'FEVER TIME!!' : 'FEVER';
 
   if (bite) chomp();
 
@@ -587,6 +622,7 @@ async function startGame() {
   fever = 0; feverUntil = 0; feverEl.style.width = '0%';
   shownScore = 0; scoreTween++;
   stage.classList.remove('fever'); timePill.classList.remove('hot');
+  feverWrap.classList.remove('full'); feverBanner.classList.remove('show');
   scoreEl.textContent = '0'; timeEl.textContent = '30';
   comboEl.classList.add('off');
   running = true;
