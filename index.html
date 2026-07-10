@@ -3,104 +3,102 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>🍔 냠냠 햄버거 게임</title>
+<title>🍔 냠냠! 햄버거 폭우 - WEMADE PLAY</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
     font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", sans-serif;
-    background: radial-gradient(circle at 50% 0%, #3a2a5a, #1a1030 70%);
+    background: radial-gradient(circle at 50% 0%, #3a2a5a, #140a26 70%);
     color: #fff;
     min-height: 100vh;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
+    padding: 16px;
     overflow: hidden;
     user-select: none;
   }
-  h1 { font-size: 28px; margin-bottom: 4px; text-shadow: 0 2px 8px rgba(0,0,0,.4); }
-  .subtitle { color: #b9a9dd; font-size: 14px; margin-bottom: 14px; }
+  .logo {
+    height: 34px; width: auto; margin-bottom: 10px;
+    background: #fff; padding: 8px 16px; border-radius: 10px;
+    box-shadow: 0 6px 18px rgba(0,0,0,.35);
+  }
+  h1 { font-size: 24px; margin-bottom: 2px; text-shadow: 0 2px 8px rgba(0,0,0,.4); }
+  .subtitle { color: #b9a9dd; font-size: 13px; margin-bottom: 12px; }
 
   #stage {
     position: relative;
     width: 640px;
-    max-width: 92vw;
+    max-width: 94vw;
     aspect-ratio: 4 / 3;
     border-radius: 20px;
     overflow: hidden;
     box-shadow: 0 20px 60px rgba(0,0,0,.5);
     background: #000;
   }
-  video, #overlay {
-    position: absolute; inset: 0;
-    width: 100%; height: 100%;
-    object-fit: cover;
-  }
-  video { transform: scaleX(-1); } /* 거울 모드 */
+  video, #overlay { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  video { transform: scaleX(-1); }
 
-  /* 햄버거 */
-  #burger {
+  /* 떨어지는 햄버거 */
+  .drop {
     position: absolute;
-    left: 50%; top: 50%;
+    font-size: 56px;
     transform: translate(-50%, -50%);
-    font-size: 120px;
-    filter: drop-shadow(0 6px 12px rgba(0,0,0,.6));
-    transition: transform .08s ease;
-    pointer-events: none;
-    z-index: 5;
+    filter: drop-shadow(0 4px 8px rgba(0,0,0,.6));
+    z-index: 5; pointer-events: none;
+    transition: filter .1s;
+    will-change: top, left;
   }
-  #burger.chomp { animation: chomp .25s ease; }
-  @keyframes chomp {
-    0%   { transform: translate(-50%, -50%) scale(1); }
-    40%  { transform: translate(-50%, -50%) scale(1.35) rotate(-8deg); }
-    100% { transform: translate(-50%, -50%) scale(1); }
+  .drop.hot { filter: drop-shadow(0 0 14px #ffe66d) drop-shadow(0 4px 8px rgba(0,0,0,.6)); }
+  .drop.eaten { animation: eat .35s ease forwards; }
+  @keyframes eat {
+    0%   { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+    40%  { transform: translate(-50%, -50%) scale(1.6) rotate(-12deg); opacity: 1; }
+    100% { transform: translate(-50%, -50%) scale(.2); opacity: 0; }
   }
 
-  /* 목표 링 (입 위치 가이드) */
-  #ring {
-    position: absolute;
-    left: 50%; top: 50%;
-    width: 180px; height: 180px;
-    transform: translate(-50%, -50%);
-    border: 3px dashed rgba(255,255,255,.35);
-    border-radius: 50%;
+  /* 입 높이 띠(먹는 구간) */
+  #band {
+    position: absolute; left: 0; right: 0;
+    top: 42%; height: 20%;
+    background: linear-gradient(180deg, rgba(255,230,109,.08), rgba(255,107,107,.14), rgba(255,230,109,.08));
+    border-top: 2px dashed rgba(255,255,255,.35);
+    border-bottom: 2px dashed rgba(255,255,255,.35);
     z-index: 4; pointer-events: none;
+    display: flex; align-items: center; justify-content: center;
   }
+  #band span { font-size: 13px; font-weight: 700; color: rgba(255,255,255,.7); text-shadow: 0 1px 3px #000; }
 
-  /* HUD */
   .hud {
     position: absolute; top: 12px; left: 12px; right: 12px;
-    display: flex; justify-content: space-between;
-    font-size: 18px; font-weight: 700;
+    display: flex; justify-content: space-between; align-items: flex-start;
+    font-size: 18px; font-weight: 800;
     text-shadow: 0 1px 4px rgba(0,0,0,.8);
     z-index: 6; pointer-events: none;
   }
-  .pill { background: rgba(0,0,0,.4); padding: 6px 14px; border-radius: 999px; }
-
-  #meterWrap {
-    position: absolute; bottom: 14px; left: 14px; right: 14px;
-    height: 14px; background: rgba(0,0,0,.4);
-    border-radius: 999px; overflow: hidden; z-index: 6;
-  }
-  #meter { height: 100%; width: 0%; background: linear-gradient(90deg,#ffb347,#ff6b6b); transition: width .15s; }
+  .pill { background: rgba(0,0,0,.45); padding: 6px 14px; border-radius: 999px; }
 
   .float {
-    position: absolute; z-index: 7; font-weight: 800; font-size: 28px;
-    color: #ffe66d; text-shadow: 0 2px 6px rgba(0,0,0,.7);
-    pointer-events: none; animation: floatUp .8s ease-out forwards;
+    position: absolute; z-index: 7; font-weight: 900;
+    color: #ffe66d; text-shadow: 0 2px 8px rgba(0,0,0,.8);
+    pointer-events: none; animation: floatUp 1s ease-out forwards;
+    left: 50%; top: 50%; transform: translate(-50%,-50%); white-space: nowrap;
   }
   @keyframes floatUp {
-    from { transform: translateY(0); opacity: 1; }
-    to   { transform: translateY(-70px); opacity: 0; }
+    0%   { transform: translate(-50%,-50%) scale(.6); opacity: 0; }
+    25%  { transform: translate(-50%,-90%) scale(1.15); opacity: 1; }
+    100% { transform: translate(-50%,-180%) scale(1); opacity: 0; }
   }
 
   #overlayMsg {
     position: absolute; inset: 0; z-index: 10;
     display: flex; flex-direction: column; align-items: center; justify-content: center;
-    background: rgba(20,10,40,.82); text-align: center; gap: 14px; padding: 20px;
+    background: rgba(20,10,40,.85); text-align: center; gap: 14px; padding: 20px;
   }
-  #overlayMsg h2 { font-size: 40px; }
-  #overlayMsg p { color: #cdbdf0; max-width: 420px; line-height: 1.6; }
+  #overlayMsg .logo { height: 30px; margin-bottom: 4px; }
+  #overlayMsg h2 { font-size: 38px; }
+  #overlayMsg p { color: #cdbdf0; max-width: 440px; line-height: 1.6; }
   button {
     background: linear-gradient(90deg,#ff6b6b,#ffb347);
     color: #201035; border: none; font-weight: 800; font-size: 18px;
@@ -110,188 +108,166 @@
   }
   button:active { transform: scale(.95); }
   .hidden { display: none !important; }
-  .tips { font-size: 13px; color: #9a89c4; margin-top: 18px; text-align: center; }
+  .tips { font-size: 13px; color: #9a89c4; margin-top: 16px; text-align: center; }
 </style>
 </head>
 <body>
-  <h1>🍔 냠냠! 햄버거 먹방 게임</h1>
-  <div class="subtitle">웹캠 앞에서 <b>입을 크게 벌렸다 오므리며</b> 햄버거를 먹어치우세요!</div>
+  <img class="logo" src="logo.png" alt="WEMADE PLAY">
+  <h1>🍔 햄버거 폭우!</h1>
+  <div class="subtitle">하늘에서 쏟아지는 햄버거를 <b>입 높이 띠</b>에서 한 번에 앙! 많이 먹을수록 콤보!</div>
 
   <div id="stage">
     <video id="video" autoplay playsinline muted></video>
-    <div id="ring"></div>
-    <div id="burger">🍔</div>
+    <div id="band"><span>👄 여기서 입 크게 벌렸다 앙! 하세요</span></div>
 
     <div class="hud">
-      <div class="pill">🍔 <span id="eaten">0</span>개</div>
+      <div class="pill">🍔 <span id="score">0</span>개</div>
       <div class="pill">⏱️ <span id="time">30</span>s</div>
     </div>
-    <div id="meterWrap"><div id="meter"></div></div>
 
     <div id="overlayMsg">
-      <h2>게임 준비</h2>
-      <p>웹캠 사용을 허용해 주세요. 햄버거가 <b>위에서 아래로 떨어져요.</b> 중앙 원(입 위치)에 도착하면 잠깐 천천히 내려오니, 그때 입을 <b>크게 벌렸다 다물어</b> 냠냠 먹어치우세요!</p>
+      <img class="logo" src="logo.png" alt="WEMADE PLAY">
+      <h2>햄버거 폭우 🍔</h2>
+      <p>웹캠을 허용해 주세요. 햄버거가 <b>하늘에서 우수수</b> 떨어져요. 노란 <b>입 높이 띠</b> 안에 햄버거가 여러 개 모였을 때 입을 <b>크게 벌렸다 다물면</b> → 그 안의 햄버거를 <b>한 번에 다 먹어요!</b></p>
       <button id="startBtn">🎬 시작하기</button>
     </div>
   </div>
 
-  <div class="tips">움직임이 클수록 한 입이 커져요 · 30초 동안 몇 개나 먹을 수 있을까요?</div>
+  <div class="tips">한 번에 여러 개 먹으면 콤보 보너스 · 30초 동안 최대한 많이!</div>
 
 <script>
 const video   = document.getElementById('video');
-const burger  = document.getElementById('burger');
-const stage    = document.getElementById('stage');
-const eatenEl  = document.getElementById('eaten');
-const timeEl   = document.getElementById('time');
-const meter    = document.getElementById('meter');
-const overlay  = document.getElementById('overlayMsg');
-const startBtn = document.getElementById('startBtn');
+const stage   = document.getElementById('stage');
+const bandEl  = document.getElementById('band');
+const scoreEl = document.getElementById('score');
+const timeEl  = document.getElementById('time');
+const overlay = document.getElementById('overlayMsg');
+const startBtn= document.getElementById('startBtn');
 
-// 햄버거 진행 단계 이모지 (먹을수록 줄어듦)
-const STAGES = ['🍔','🍔','🍔','🥪','🥪','🥯','🍞','😋'];
+const BURGERS = ['🍔','🍔','🍔','🍔','🍟','🌭','🌮','🍕'];
+const BAND_TOP = 42, BAND_BOT = 62;   // 먹는 구간(%)
 
-let stream = null;
-let running = false;
-let eatenCount = 0;
-let timeLeft = 30;
-let progress = 0;          // 현재 햄버거 먹은 정도 0~100
-let cooldown = 0;
+let stream = null, running = false;
+let score = 0, timeLeft = 30;
+let cooldown = 0, frame = 0;
+let drops = [];   // {el, x, y, vy, eaten}
 
-// 떨어지는 햄버거 위치(%). -12 = 화면 위, 115 = 화면 아래로 사라짐
-let burgerY = -12;
-const FALL_FAST = 0.55;    // 평소 낙하 속도
-const FALL_SLOW = 0.10;    // 입 근처(먹는 구간)에서 느려짐
-const ZONE_TOP = 40, ZONE_BOT = 62;  // 먹을 수 있는 구간(%)
-
-// 모션 감지용 캔버스
+// 모션 감지
 const proc = document.createElement('canvas');
 const pctx = proc.getContext('2d', { willReadFrequently: true });
-const W = 64, H = 48;      // 저해상도로 처리(빠름)
-proc.width = W; proc.height = H;
+const W = 64, H = 48; proc.width = W; proc.height = H;
 let prevFrame = null;
 
 async function initCamera() {
   try {
     stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
-    video.srcObject = stream;
-    await video.play();
-    return true;
+    video.srcObject = stream; await video.play(); return true;
   } catch (e) {
-    overlay.innerHTML = '<h2>😢 카메라를 열 수 없어요</h2><p>브라우저의 카메라 권한을 허용했는지 확인해 주세요. (macOS: 시스템 설정 → 개인정보 보호 → 카메라)</p>';
     overlay.classList.remove('hidden');
+    overlay.innerHTML = '<h2>😢 카메라를 열 수 없어요</h2><p>브라우저의 카메라 권한을 허용했는지 확인해 주세요.</p>';
     return false;
   }
 }
 
-// 중앙 영역(입 위치)의 움직임량 측정
 function motionInCenter() {
-  pctx.save();
-  pctx.scale(-1, 1);                 // 거울
-  pctx.drawImage(video, -W, 0, W, H);
-  pctx.restore();
+  pctx.save(); pctx.scale(-1, 1); pctx.drawImage(video, -W, 0, W, H); pctx.restore();
   const cur = pctx.getImageData(0, 0, W, H).data;
-
   if (!prevFrame) { prevFrame = cur.slice(); return 0; }
-
-  // 중앙 사각형 영역만 검사
   const x0 = W*0.28|0, x1 = W*0.72|0, y0 = H*0.30|0, y1 = H*0.80|0;
-  let diff = 0, count = 0;
-  for (let y = y0; y < y1; y++) {
-    for (let x = x0; x < x1; x++) {
-      const i = (y*W + x) * 4;
-      const d = Math.abs(cur[i]-prevFrame[i]) + Math.abs(cur[i+1]-prevFrame[i+1]) + Math.abs(cur[i+2]-prevFrame[i+2]);
-      if (d > 45) count++;
-      diff += d;
-      count;
-    }
+  let diff = 0;
+  for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) {
+    const i = (y*W + x) * 4;
+    diff += Math.abs(cur[i]-prevFrame[i]) + Math.abs(cur[i+1]-prevFrame[i+1]) + Math.abs(cur[i+2]-prevFrame[i+2]);
   }
   prevFrame = cur.slice();
-  const area = (x1-x0)*(y1-y0);
-  return diff / area;                // 평균 픽셀 변화량
+  return diff / ((x1-x0)*(y1-y0));
 }
 
-function popText(txt) {
+function popText(txt, big) {
   const el = document.createElement('div');
   el.className = 'float';
   el.textContent = txt;
-  el.style.left = (40 + Math.random()*40) + '%';
-  el.style.top  = '38%';
+  el.style.fontSize = big ? '40px' : '26px';
+  el.style.top = (30 + Math.random()*10) + '%';
   stage.appendChild(el);
-  setTimeout(() => el.remove(), 800);
+  setTimeout(() => el.remove(), 1000);
 }
 
-function updateBurgerFace() {
-  const idx = Math.min(STAGES.length - 2, Math.floor(progress / 100 * (STAGES.length - 1)));
-  burger.textContent = STAGES[idx];
-  meter.style.width = progress + '%';
+function spawnDrop() {
+  const el = document.createElement('div');
+  el.className = 'drop';
+  el.textContent = BURGERS[Math.random()*BURGERS.length|0];
+  const x = 8 + Math.random()*84;        // 좌우 위치 %
+  el.style.left = x + '%';
+  el.style.top = '-8%';
+  stage.appendChild(el);
+  drops.push({ el, x, y: -8, vy: 0.32 + Math.random()*0.34, eaten: false });
 }
 
-// 새 햄버거를 화면 위에서 다시 떨어뜨림
-function spawnBurger() {
-  burgerY = -12;
-  progress = 0;
-  burger.textContent = '🍔';
-  updateBurgerFace();
+function chomp() {
+  // 띠 안에 있는(아직 안 먹은) 햄버거를 전부 먹기
+  let n = 0;
+  for (const d of drops) {
+    if (!d.eaten && d.y >= BAND_TOP && d.y <= BAND_BOT) {
+      d.eaten = true; n++;
+      d.el.classList.add('eaten');
+      setTimeout(() => d.el.remove(), 350);
+    }
+  }
+  if (n === 0) return;
+  score += n; scoreEl.textContent = score;
+  if (n >= 3)      popText(n + '개 앙!! 🔥 콤보!', true);
+  else if (n === 2) popText('2개 앙! 😋', true);
+  else             popText('냠!');
 }
 
 function loop() {
   if (!running) return;
+  frame++;
   const m = motionInCenter();
   if (cooldown > 0) cooldown--;
 
-  // 먹는 구간에 들어오면 천천히, 아니면 빠르게 낙하
-  const inZone = burgerY >= ZONE_TOP && burgerY <= ZONE_BOT;
-  burgerY += inZone ? FALL_SLOW : FALL_FAST;
-  burger.style.top = burgerY + '%';
-
-  // 아래로 놓쳐서 사라지면 새 햄버거 투하
-  if (burgerY > 115) {
-    popText('아까워! 🫠');
-    spawnBurger();
-    requestAnimationFrame(loop);
-    return;
+  // 햄버거 낙하 + 화면 갱신
+  for (const d of drops) {
+    if (d.eaten) continue;
+    d.y += d.vy;
+    d.el.style.top = d.y + '%';
+    const hot = d.y >= BAND_TOP && d.y <= BAND_BOT;
+    d.el.classList.toggle('hot', hot);
   }
+  // 바닥으로 놓친 것 제거
+  drops = drops.filter(d => {
+    if (!d.eaten && d.y > 112) { d.el.remove(); return false; }
+    return d.el.isConnected;
+  });
 
-  // 입 위치(구간)에 있을 때만, 움직임 임계치를 넘으면 "한 입"
-  if (inZone && m > 14 && cooldown === 0) {
-    const bite = Math.min(45, 8 + m * 0.9);   // 움직임 클수록 큰 한 입
-    progress += bite;
-    cooldown = 6;                              // 연속 인식 방지
-    burger.classList.remove('chomp');
-    void burger.offsetWidth;
-    burger.classList.add('chomp');
-    updateBurgerFace();
+  // 스폰: 시간이 갈수록 더 자주
+  const spawnEvery = Math.max(16, 40 - (30 - timeLeft));  // 40 → 16 frame
+  if (frame % spawnEvery === 0) spawnDrop();
 
-    if (progress >= 100) {
-      // 한 개 완식!
-      eatenCount++;
-      eatenEl.textContent = eatenCount;
-      popText('+1 😋');
-      burger.textContent = '😋';
-      cooldown = 12;
-      setTimeout(() => { if (running) spawnBurger(); }, 300);  // 다음 햄버거 투하
-    } else {
-      popText('냠!');
-    }
-  }
+  // 입 움직임 감지 → 한 입(띠 안 전부)
+  if (m > 13 && cooldown === 0) { chomp(); cooldown = 9; }
+
   requestAnimationFrame(loop);
 }
 
 function tick() {
   if (!running) return;
-  timeLeft--;
-  timeEl.textContent = timeLeft;
+  timeLeft--; timeEl.textContent = timeLeft;
   if (timeLeft <= 0) { endGame(); return; }
   setTimeout(tick, 1000);
 }
 
+function clearDrops() { for (const d of drops) d.el.remove(); drops = []; }
+
 function endGame() {
-  running = false;
+  running = false; clearDrops();
   overlay.classList.remove('hidden');
+  const grade = score >= 25 ? '🏆 전설의 대식가!' : score >= 15 ? '🔥 폭식 챔피언!' : score >= 7 ? '👍 훌륭한 먹방!' : '🙂 다음엔 더 많이!';
   overlay.innerHTML =
+    '<img class="logo" src="logo.png" alt="WEMADE PLAY">' +
     '<h2>⏰ 끝!</h2>' +
-    '<p>총 <b style="font-size:28px;color:#ffe66d">' + eatenCount + '개</b>의 햄버거를 먹었어요!<br>' +
-    (eatenCount >= 8 ? '🏆 대식가 등극!' : eatenCount >= 4 ? '👍 훌륭한 먹방!' : '🙂 다음엔 더 많이!') + '</p>' +
+    '<p>총 <b style="font-size:30px;color:#ffe66d">' + score + '개</b>의 햄버거를 먹었어요!<br>' + grade + '</p>' +
     '<button id="againBtn">🔄 다시 하기</button>';
   document.getElementById('againBtn').onclick = startGame;
 }
@@ -299,12 +275,11 @@ function endGame() {
 async function startGame() {
   overlay.classList.add('hidden');
   if (!stream) { const ok = await initCamera(); if (!ok) return; }
-  eatenCount = 0; timeLeft = 30; progress = 0; cooldown = 0; prevFrame = null;
-  eatenEl.textContent = '0'; timeEl.textContent = '30';
-  spawnBurger();
+  clearDrops();
+  score = 0; timeLeft = 30; cooldown = 0; frame = 0; prevFrame = null;
+  scoreEl.textContent = '0'; timeEl.textContent = '30';
   running = true;
-  loop();
-  tick();
+  loop(); tick();
 }
 
 startBtn.onclick = startGame;
