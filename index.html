@@ -245,7 +245,7 @@ let cooldown = 0, frame = 0;
 let streak = 0, bestStreak = 0;
 let drops = [];   // {el, x, y, vy, eaten, type}
 let armed = true;                         // 입을 다물었다 벌리는 순간만 '한 입' 발동
-const JAW_OPEN = 0.4, JAW_CLOSED = 0.18;  // 입 벌림 판정 임계값 (0~1)
+const JAW_OPEN = 0.3, JAW_CLOSED = 0.15;  // 입 벌림 판정 임계값 (0~1) — 낮을수록 민감
 
 // 효과음 (Web Audio로 즉석 생성)
 let actx = null;
