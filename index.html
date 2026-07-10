@@ -171,6 +171,16 @@
   }
   .camtab:active { transform: scale(.96); }
 
+  /* 점수 연출 */
+  #scorePill { transition: transform .13s, background .13s; }
+  #scorePill.bump { transform: scale(1.32); }
+  #scorePill.gain { background: rgba(46,204,113,.85) !important; }
+  #scorePill.loss { background: rgba(255,59,48,.85) !important; }
+  .flyscore {
+    position: absolute; z-index: 8; font-weight: 900; pointer-events: none;
+    text-shadow: 0 2px 8px rgba(0,0,0,.8); will-change: transform, opacity;
+  }
+
   /* 피버 게이지 & 피버 타임 */
   #feverWrap {
     position: absolute; top: 60px; left: 50%; transform: translateX(-50%);
@@ -224,7 +234,7 @@
     <div id="band"><span>👄 여기서 입 크게 벌렸다 앙! 하세요</span></div>
 
     <div class="hud">
-      <div class="pill">🍔 <span id="score">0</span></div>
+      <div class="pill" id="scorePill">🍔 <span id="score">0</span></div>
       <div class="pill off" id="comboPill">🔥 x1</div>
       <div class="pill" id="timePill">⏱️ <span id="time">30</span>s</div>
     </div>
@@ -258,6 +268,7 @@ const scoreEl = document.getElementById('score');
 const timeEl  = document.getElementById('time');
 const comboEl = document.getElementById('comboPill');
 const feverEl = document.getElementById('fever');
+const scorePill = document.getElementById('scorePill');
 const timePill= document.getElementById('timePill');
 const overlay = document.getElementById('overlayMsg');
 const startBtn= document.getElementById('startBtn');
@@ -300,6 +311,47 @@ function sfx(type) {
   });
 }
 function shake() { stage.classList.remove('shake'); void stage.offsetWidth; stage.classList.add('shake'); }
+
+// 점수 연출: 날아가는 점수 + 점수판 펀치 + 숫자 롤링
+let shownScore = 0, scoreTween = 0;
+function scoreFX(delta) {
+  if (delta === 0) return;
+  const up = delta > 0;
+  // ① 먹은 자리에서 점수판으로 날아가는 숫자
+  try {
+    const fly = document.createElement('div');
+    fly.className = 'flyscore';
+    fly.textContent = (up ? '+' : '') + delta;
+    fly.style.color = up ? '#7bed9f' : '#ff8080';
+    fly.style.fontSize = Math.min(48, 24 + Math.abs(delta) * 2.5) + 'px';
+    const stR = stage.getBoundingClientRect(), pR = scorePill.getBoundingClientRect();
+    const sx = stR.width * (0.42 + Math.random() * 0.16), sy = stR.height * 0.52;
+    const ex = pR.left - stR.left + pR.width / 2, ey = pR.top - stR.top + pR.height / 2;
+    fly.style.left = sx + 'px'; fly.style.top = sy + 'px';
+    stage.appendChild(fly);
+    fly.animate([
+      { transform: 'translate(-50%,-50%) scale(1.35)', opacity: 1 },
+      { transform: 'translate(-50%,-50%) scale(1.35)', opacity: 1, offset: 0.25 },
+      { transform: `translate(calc(-50% + ${ex - sx}px), calc(-50% + ${ey - sy}px)) scale(.45)`, opacity: .2 }
+    ], { duration: 700, easing: 'cubic-bezier(.3,.6,.3,1)' }).onfinish = () => fly.remove();
+    setTimeout(() => fly.remove(), 900);   // 안전망
+  } catch (e) {}
+  // ② 점수판 펀치 + 색 번쩍 (숫자 도착 타이밍에)
+  setTimeout(() => {
+    scorePill.classList.add('bump', up ? 'gain' : 'loss');
+    setTimeout(() => scorePill.classList.remove('bump', 'gain', 'loss'), 320);
+  }, 560);
+  // ③ 숫자 롤링 (촤라락)
+  const from = shownScore, to = score, t0 = performance.now(), dur = 450, id = ++scoreTween;
+  (function step(t) {
+    if (id !== scoreTween) return;
+    const k = Math.min(1, (t - t0) / dur);
+    shownScore = Math.round(from + (to - from) * k);
+    scoreEl.textContent = shownScore;
+    if (k < 1) requestAnimationFrame(step); else shownScore = to;
+  })(t0);
+  setTimeout(() => { if (id === scoreTween) { shownScore = to; scoreEl.textContent = to; } }, dur + 150);  // rAF 정지 대비
+}
 function updateCombo() {
   const mult = multiplier();
   comboEl.textContent = '🔥 x' + mult;
@@ -378,6 +430,7 @@ function spawnDrop() {
 
 function chomp() {
   // 띠 안에 있는(아직 안 먹은) 음식을 전부 먹기 — 🍔 +, ⭐ 보너스, 나머지 -
+  const s0 = score;
   let good = 0, bad = 0, gold = 0, bombs = 0;
   for (const d of drops) {
     if (!d.eaten && d.y >= BAND_TOP && d.y <= BAND_BOT) {
@@ -434,7 +487,7 @@ function chomp() {
       else                        popText('냠! +' + gained);
     }
   }
-  scoreEl.textContent = score;
+  scoreFX(score - s0);
 }
 
 function setBandHint(txt) { const s = bandEl.firstElementChild; if (s) s.textContent = txt; }
@@ -532,6 +585,7 @@ async function startGame() {
   score = 0; timeLeft = 30; cooldown = 0; frame = 0; prevFrame = null;
   streak = 0; bestStreak = 0; armed = true;
   fever = 0; feverUntil = 0; feverEl.style.width = '0%';
+  shownScore = 0; scoreTween++;
   stage.classList.remove('fever'); timePill.classList.remove('hot');
   scoreEl.textContent = '0'; timeEl.textContent = '30';
   comboEl.classList.add('off');
