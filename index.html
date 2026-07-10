@@ -163,6 +163,13 @@
   }
   button:active { transform: scale(.95); }
   .hidden { display: none !important; }
+  .camtab {
+    display: inline-block; margin-top: 2px;
+    font-size: 13.5px; font-weight: 700; color: #ffd93d;
+    background: rgba(255,217,61,.12); border: 1px solid rgba(255,217,61,.45);
+    padding: 9px 18px; border-radius: 999px; text-decoration: none;
+  }
+  .camtab:active { transform: scale(.96); }
   .tips { font-size: 13px; color: #9a89c4; margin-top: 16px; text-align: center; }
 
   /* 📱 모바일 최적화 */
@@ -212,6 +219,7 @@
         </div>
       </div>
       <button id="startBtn">🎬 시작하기</button>
+      <a id="camTabBtn" class="camtab hidden" target="_blank" rel="noopener">📷 웹캠 입 인식 모드로 하려면? → 새 탭에서 열기</a>
     </div>
   </div>
 
@@ -236,6 +244,7 @@ let streak = 0, bestStreak = 0;
 let drops = [];   // {el, x, y, vy, eaten, type}
 let tapMode = false;   // 카메라 불가(iframe 권한 없음/거부) 시 스페이스바/탭으로 플레이
 let camBlockReason = '';
+let camPolicyBlocked = false;
 let armed = true;                         // 입을 다물었다 벌리는 순간만 '한 입' 발동
 const JAW_OPEN = 0.3, JAW_CLOSED = 0.15;  // 입 벌림 판정 임계값 (0~1) — 낮을수록 민감
 
@@ -287,6 +296,11 @@ async function initCamera() {
     tapMode = true;
     camBlockReason = (e && (e.name === 'NotAllowedError' || e.name === 'SecurityError'))
       ? 'iframe/브라우저에서 카메라가 차단됨' : '카메라를 찾을 수 없음';
+    if (e && (e.name === 'NotAllowedError' || e.name === 'SecurityError') && window.self !== window.top) {
+      camPolicyBlocked = true;
+      const a = document.getElementById('camTabBtn');
+      if (a) { a.href = location.href; a.classList.remove('hidden'); }
+    }
     stage.classList.add('tap');
     return true;
   }
@@ -442,7 +456,8 @@ function endGame() {
     '<h2>⏰ 끝!</h2>' +
     '<p>최종 점수 <b style="font-size:32px;color:#ffe66d">' + score + '점</b><br>' +
     '최고 콤보 🔥 <b>x' + Math.min(5, 1 + Math.floor(Math.max(0,bestStreak-1)/2)) + '</b> (' + bestStreak + '연속)<br>' + grade + '</p>' +
-    '<button id="againBtn">🔄 다시 하기</button>';
+    '<button id="againBtn">🔄 다시 하기</button>' +
+    (camPolicyBlocked ? '<a class="camtab" target="_blank" rel="noopener" href="' + location.href + '">📷 웹캠 입 인식 모드로 하려면? → 새 탭에서 열기</a>' : '');
   document.getElementById('againBtn').onclick = startGame;
 }
 
@@ -466,6 +481,18 @@ window.addEventListener('keydown', e => { if (e.code === 'Space') { e.preventDef
 stage.addEventListener('pointerdown', e => { if (e.target.closest('button')) return; manualBite(); });
 
 startBtn.onclick = startGame;
+
+// iframe에서 카메라가 정책상 차단된 경우 → "새 탭에서 열기" 안내 표시
+try {
+  const inIframe = window.self !== window.top;
+  const fp = document.featurePolicy || document.permissionsPolicy;
+  const camAllowed = fp && fp.allowsFeature ? fp.allowsFeature('camera') : true;
+  if (inIframe && !camAllowed) {
+    camPolicyBlocked = true;
+    const a = document.getElementById('camTabBtn');
+    if (a) { a.href = location.href; a.classList.remove('hidden'); }
+  }
+} catch (e) {}
 </script>
 
 <!-- 얼굴 랜드마크(입 벌림) 인식: MediaPipe FaceLandmarker -->
