@@ -43,20 +43,44 @@
   /* 떨어지는 햄버거 */
   .drop {
     position: absolute;
-    font-size: 56px;
+    font-size: 38px;
     transform: translate(-50%, -50%);
     filter: drop-shadow(0 4px 8px rgba(0,0,0,.6));
     z-index: 5; pointer-events: none;
     transition: filter .1s;
     will-change: top, left;
   }
-  .drop.hot { filter: drop-shadow(0 0 14px #ffe66d) drop-shadow(0 4px 8px rgba(0,0,0,.6)); }
+  .drop.hot { filter: drop-shadow(0 0 12px #ffe66d) drop-shadow(0 4px 8px rgba(0,0,0,.6)); }
+  .drop.gold { animation: sparkle .8s ease-in-out infinite; }
+  .drop.gold.hot { filter: drop-shadow(0 0 16px #ffd93d) drop-shadow(0 0 6px #fff); }
+  @keyframes sparkle {
+    0%,100% { filter: drop-shadow(0 0 8px #ffd93d); }
+    50%     { filter: drop-shadow(0 0 18px #fff) drop-shadow(0 0 8px #ffd93d); }
+  }
   .drop.eaten { animation: eat .35s ease forwards; }
   @keyframes eat {
     0%   { transform: translate(-50%, -50%) scale(1); opacity: 1; }
     40%  { transform: translate(-50%, -50%) scale(1.6) rotate(-12deg); opacity: 1; }
     100% { transform: translate(-50%, -50%) scale(.2); opacity: 0; }
   }
+
+  /* 화면 흔들림 */
+  @keyframes shake {
+    0%,100% { transform: translate(0,0); }
+    20% { transform: translate(-6px, 3px); }
+    40% { transform: translate(6px, -3px); }
+    60% { transform: translate(-5px, -2px); }
+    80% { transform: translate(5px, 2px); }
+  }
+  #stage.shake { animation: shake .3s; }
+
+  /* 콤보 표시 */
+  #comboPill {
+    background: linear-gradient(90deg,#ff6b6b,#ffb347);
+    color: #201035; transition: transform .12s;
+  }
+  #comboPill.bump { transform: scale(1.35); }
+  #comboPill.off { opacity: 0; }
 
   /* 입 높이 띠(먹는 구간) */
   #band {
@@ -132,14 +156,15 @@
     <div id="band"><span>👄 여기서 입 크게 벌렸다 앙! 하세요</span></div>
 
     <div class="hud">
-      <div class="pill">🍔 <span id="score">0</span>개</div>
+      <div class="pill">🍔 <span id="score">0</span></div>
+      <div class="pill off" id="comboPill">🔥 x1</div>
       <div class="pill">⏱️ <span id="time">30</span>s</div>
     </div>
 
     <div id="overlayMsg">
       <img class="logo" src="logo.png" alt="WEMADE PLAY">
       <h2>햄버거 폭우 🍔</h2>
-      <p>웹캠을 허용해 주세요. 하늘에서 음식이 떨어져요. 노란 <b>입 높이 띠</b>에서 입을 <b>크게 벌렸다 다물면</b> 그 안의 음식을 한 번에 다 먹어요.<br><b>🍔 햄버거 = +1점</b>, 🍟🌭🍕🌮 <b>다른 음식 = -1점!</b> 햄버거만 골라 드세요!</p>
+      <p>웹캠을 허용해 주세요. 하늘에서 음식이 떨어져요. 노란 <b>입 높이 띠</b>에서 입을 <b>크게 벌렸다 다물면</b> 그 안의 음식을 한 번에 다 먹어요.<br><b>🍔 햄버거 = +점</b>, 🍟🌭🍕🌮 <b>다른 음식 = -점!</b><br>연속으로 햄버거만 먹으면 <b>🔥콤보 배수(최대 x5)</b>, 가끔 떨어지는 <b>⭐별은 보너스(+5)</b>!</p>
       <button id="startBtn">🎬 시작하기</button>
     </div>
   </div>
@@ -152,6 +177,7 @@ const stage   = document.getElementById('stage');
 const bandEl  = document.getElementById('band');
 const scoreEl = document.getElementById('score');
 const timeEl  = document.getElementById('time');
+const comboEl = document.getElementById('comboPill');
 const overlay = document.getElementById('overlayMsg');
 const startBtn= document.getElementById('startBtn');
 
@@ -161,7 +187,40 @@ const BAND_TOP = 42, BAND_BOT = 62;   // 먹는 구간(%)
 let stream = null, running = false;
 let score = 0, timeLeft = 30;
 let cooldown = 0, frame = 0;
-let drops = [];   // {el, x, y, vy, eaten}
+let streak = 0, bestStreak = 0;
+let drops = [];   // {el, x, y, vy, eaten, type}
+
+// 효과음 (Web Audio로 즉석 생성)
+let actx = null;
+function sfx(type) {
+  if (!actx) return;
+  const t = actx.currentTime;
+  const beep = (freq, f2, dur, wave, vol) => {
+    const o = actx.createOscillator(), g = actx.createGain();
+    o.type = wave; o.frequency.setValueAtTime(freq, t);
+    if (f2) o.frequency.exponentialRampToValueAtTime(f2, t + dur);
+    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    o.connect(g).connect(actx.destination); o.start(t); o.stop(t + dur + 0.02);
+  };
+  if (type === 'chomp') beep(200, 70, 0.13, 'square', 0.22);
+  else if (type === 'coin') { beep(880, null, 0.08, 'triangle', 0.2); setTimeout(()=>actx&&beep(1320,null,0.12,'triangle',0.18), 60); }
+  else if (type === 'bad')  beep(150, 45, 0.32, 'sawtooth', 0.25);
+  else if (type === 'star') [660,880,1100,1320].forEach((f,i)=>{
+    const o=actx.createOscillator(), g=actx.createGain(), st=t+i*0.05;
+    o.type='triangle'; o.frequency.value=f;
+    g.gain.setValueAtTime(0.18, st); g.gain.exponentialRampToValueAtTime(0.001, st+0.16);
+    o.connect(g).connect(actx.destination); o.start(st); o.stop(st+0.18);
+  });
+}
+function shake() { stage.classList.remove('shake'); void stage.offsetWidth; stage.classList.add('shake'); }
+function updateCombo() {
+  const mult = multiplier();
+  comboEl.textContent = '🔥 x' + mult;
+  comboEl.classList.toggle('off', streak < 1);
+  comboEl.classList.add('bump');
+  setTimeout(() => comboEl.classList.remove('bump'), 130);
+}
+function multiplier() { return Math.min(5, 1 + Math.floor(Math.max(0, streak - 1) / 2)); } // 1,1,2,2,3,3,4,4,5
 
 // 모션 감지
 const proc = document.createElement('canvas');
@@ -208,32 +267,57 @@ function popText(txt, big, bad) {
 function spawnDrop() {
   const el = document.createElement('div');
   el.className = 'drop';
-  el.textContent = BURGERS[Math.random()*BURGERS.length|0];
+  let type;
+  if (Math.random() < 0.07) { el.textContent = '⭐'; el.classList.add('gold'); type = 'gold'; }  // 황금 별 보너스
+  else { const e = BURGERS[Math.random()*BURGERS.length|0]; el.textContent = e; type = (e === '🍔') ? 'good' : 'bad'; }
   const x = 8 + Math.random()*84;        // 좌우 위치 %
   el.style.left = x + '%';
   el.style.top = '-8%';
   stage.appendChild(el);
-  drops.push({ el, x, y: -8, vy: 0.32 + Math.random()*0.34, eaten: false, good: el.textContent === '🍔' });
+  drops.push({ el, x, y: -8, vy: 0.32 + Math.random()*0.34, eaten: false, type });
 }
 
 function chomp() {
-  // 띠 안에 있는(아직 안 먹은) 음식을 전부 먹기 — 햄버거는 +, 나머지는 -
-  let good = 0, bad = 0;
+  // 띠 안에 있는(아직 안 먹은) 음식을 전부 먹기 — 🍔 +, ⭐ 보너스, 나머지 -
+  let good = 0, bad = 0, gold = 0;
   for (const d of drops) {
     if (!d.eaten && d.y >= BAND_TOP && d.y <= BAND_BOT) {
       d.eaten = true;
-      if (d.good) good++; else bad++;
+      if (d.type === 'good') good++;
+      else if (d.type === 'gold') gold++;
+      else bad++;
       d.el.classList.add('eaten');
       setTimeout(() => d.el.remove(), 350);
     }
   }
-  if (good === 0 && bad === 0) return;
-  score += good - bad; scoreEl.textContent = score;
-  if (bad > 0 && good === 0)  popText('-' + bad + ' 🤢 우엑!', true, true);
-  else if (bad > 0)           popText('+' + good + '  -' + bad + ' 😵', true, bad >= good);
-  else if (good >= 3)         popText(good + '개 앙!! 🔥 콤보!', true);
-  else if (good === 2)        popText('2개 앙! 😋', true);
-  else                        popText('냠!');
+  if (good === 0 && bad === 0 && gold === 0) return;
+
+  const base = good + gold * 5;   // 별은 5점짜리
+
+  if (bad > 0) {
+    // 실수! 콤보 리셋 + 감점
+    streak = 0;
+    score += base - bad;
+    sfx('bad'); shake(); updateCombo();
+    if (good === 0 && gold === 0) popText('-' + bad + ' 🤢 우엑!', true, true);
+    else                          popText('+' + base + '  -' + bad + ' 😵', true, bad >= base);
+  } else {
+    // 성공! 콤보 상승 → 배수 적용
+    streak++;
+    bestStreak = Math.max(bestStreak, streak);
+    const mult = multiplier();
+    const gained = base * mult;
+    score += gained;
+    updateCombo();
+    if (gold > 0) { sfx('star'); shake(); popText('⭐ +' + gained + ' 보너스!', true); }
+    else {
+      sfx('chomp'); if (mult >= 2) sfx('coin');
+      if (mult >= 3 || good >= 3) { shake(); popText(good + '개 x' + mult + ' 🔥 +' + gained, true); }
+      else if (mult === 2)        popText(good + '개 x2 +' + gained, true);
+      else                        popText('냠! +' + gained);
+    }
+  }
+  scoreEl.textContent = score;
 }
 
 function loop() {
@@ -278,21 +362,27 @@ function clearDrops() { for (const d of drops) d.el.remove(); drops = []; }
 function endGame() {
   running = false; clearDrops();
   overlay.classList.remove('hidden');
-  const grade = score >= 25 ? '🏆 전설의 대식가!' : score >= 15 ? '🔥 폭식 챔피언!' : score >= 7 ? '👍 훌륭한 먹방!' : '🙂 다음엔 더 많이!';
+  comboEl.classList.add('off');
+  const grade = score >= 40 ? '🏆 전설의 대식가!' : score >= 25 ? '🔥 폭식 챔피언!' : score >= 12 ? '👍 훌륭한 먹방!' : '🙂 다음엔 더 많이!';
   overlay.innerHTML =
     '<img class="logo" src="logo.png" alt="WEMADE PLAY">' +
     '<h2>⏰ 끝!</h2>' +
-    '<p>총 <b style="font-size:30px;color:#ffe66d">' + score + '개</b>의 햄버거를 먹었어요!<br>' + grade + '</p>' +
+    '<p>최종 점수 <b style="font-size:32px;color:#ffe66d">' + score + '점</b><br>' +
+    '최고 콤보 🔥 <b>x' + Math.min(5, 1 + Math.floor(Math.max(0,bestStreak-1)/2)) + '</b> (' + bestStreak + '연속)<br>' + grade + '</p>' +
     '<button id="againBtn">🔄 다시 하기</button>';
   document.getElementById('againBtn').onclick = startGame;
 }
 
 async function startGame() {
   overlay.classList.add('hidden');
+  // 오디오 컨텍스트는 클릭(사용자 제스처) 시점에 생성/재개
+  try { actx = actx || new (window.AudioContext || window.webkitAudioContext)(); if (actx.state === 'suspended') actx.resume(); } catch(e) { actx = null; }
   if (!stream) { const ok = await initCamera(); if (!ok) return; }
   clearDrops();
   score = 0; timeLeft = 30; cooldown = 0; frame = 0; prevFrame = null;
+  streak = 0; bestStreak = 0;
   scoreEl.textContent = '0'; timeEl.textContent = '30';
+  comboEl.classList.add('off');
   running = true;
   loop(); tick();
 }
