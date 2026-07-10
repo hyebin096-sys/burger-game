@@ -244,6 +244,8 @@ let score = 0, timeLeft = 30;
 let cooldown = 0, frame = 0;
 let streak = 0, bestStreak = 0;
 let drops = [];   // {el, x, y, vy, eaten, type}
+let armed = true;                         // 입을 다물었다 벌리는 순간만 '한 입' 발동
+const JAW_OPEN = 0.4, JAW_CLOSED = 0.18;  // 입 벌림 판정 임계값 (0~1)
 
 // 효과음 (Web Audio로 즉석 생성)
 let actx = null;
@@ -375,11 +377,32 @@ function chomp() {
   scoreEl.textContent = score;
 }
 
+function setBandHint(txt) { const s = bandEl.firstElementChild; if (s) s.textContent = txt; }
+
+// 한 입(=chomp)을 판정: MediaPipe 입벌림(jawOpen) 우선, 없으면 모션 폴백
+function detectBite() {
+  if (window.__faceReady && !window.__faceFailed) {
+    try { window.__detectFace(video, performance.now()); } catch (e) {}
+    const jaw = window.__jawOpen || 0;
+    if (jaw < JAW_CLOSED) armed = true;                 // 입을 다물면 재장전
+    if (!window.__facePresent) setBandHint('🙂 얼굴이 안 보여요 — 화면 중앙으로!');
+    else setBandHint(jaw > JAW_OPEN ? '앙! 🍔' : '👄 입을 크게 벌리세요!');
+    if (armed && jaw > JAW_OPEN) { armed = false; return true; }  // 벌리는 순간 = 한 입
+    return false;
+  }
+  // 폴백: 중앙 영역 모션 감지
+  const m = motionInCenter();
+  if (cooldown > 0) cooldown--;
+  setBandHint(window.__faceFailed ? '👄 입 크게 벌렸다 앙!' : '⏳ 얼굴 인식 로딩 중…');
+  if (m > 13 && cooldown === 0) { cooldown = 9; return true; }
+  return false;
+}
+
 function loop() {
   if (!running) return;
   frame++;
-  const m = motionInCenter();
-  if (cooldown > 0) cooldown--;
+
+  const bite = detectBite();
 
   // 햄버거 낙하 + 화면 갱신
   for (const d of drops) {
@@ -399,8 +422,7 @@ function loop() {
   const spawnEvery = Math.max(40, 78 - (30 - timeLeft) * 1.1);  // 78 → 40 frame
   if (frame % Math.round(spawnEvery) === 0) spawnDrop();
 
-  // 입 움직임 감지 → 한 입(띠 안 전부)
-  if (m > 13 && cooldown === 0) { chomp(); cooldown = 9; }
+  if (bite) chomp();
 
   requestAnimationFrame(loop);
 }
@@ -435,7 +457,7 @@ async function startGame() {
   if (!stream) { const ok = await initCamera(); if (!ok) return; }
   clearDrops();
   score = 0; timeLeft = 30; cooldown = 0; frame = 0; prevFrame = null;
-  streak = 0; bestStreak = 0;
+  streak = 0; bestStreak = 0; armed = true;
   scoreEl.textContent = '0'; timeEl.textContent = '30';
   comboEl.classList.add('off');
   running = true;
@@ -443,6 +465,43 @@ async function startGame() {
 }
 
 startBtn.onclick = startGame;
+</script>
+
+<!-- 얼굴 랜드마크(입 벌림) 인식: MediaPipe FaceLandmarker -->
+<script type="module">
+  window.__jawOpen = 0;
+  window.__facePresent = false;
+  window.__faceReady = false;
+  window.__faceFailed = false;
+  let landmarker = null, lastTs = -1;
+  const V = "0.10.18";
+  const MODEL = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task";
+  try {
+    const { FaceLandmarker, FilesetResolver } = await import(`https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${V}/vision_bundle.mjs`);
+    const fileset = await FilesetResolver.forVisionTasks(`https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${V}/wasm`);
+    const make = (delegate) => FaceLandmarker.createFromOptions(fileset, {
+      baseOptions: { modelAssetPath: MODEL, delegate },
+      outputFaceBlendshapes: true, runningMode: "VIDEO", numFaces: 1
+    });
+    try { landmarker = await make("GPU"); } catch (e) { landmarker = await make("CPU"); }
+    window.__detectFace = (video, ts) => {
+      if (!landmarker || ts <= lastTs || !video.videoWidth) return;
+      lastTs = ts;
+      const res = landmarker.detectForVideo(video, ts);
+      if (res.faceBlendshapes && res.faceBlendshapes.length) {
+        window.__facePresent = true;
+        const jaw = res.faceBlendshapes[0].categories.find(c => c.categoryName === 'jawOpen');
+        window.__jawOpen = jaw ? jaw.score : 0;
+      } else {
+        window.__facePresent = false; window.__jawOpen = 0;
+      }
+    };
+    window.__faceReady = true;
+    console.log('FaceLandmarker ready ✅');
+  } catch (e) {
+    window.__faceFailed = true;
+    console.warn('FaceLandmarker 로드 실패 → 모션 폴백:', e);
+  }
 </script>
 </body>
 </html>
