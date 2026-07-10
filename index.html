@@ -170,6 +170,31 @@
     padding: 9px 18px; border-radius: 999px; text-decoration: none;
   }
   .camtab:active { transform: scale(.96); }
+
+  /* 피버 게이지 & 피버 타임 */
+  #feverWrap {
+    position: absolute; top: 60px; left: 50%; transform: translateX(-50%);
+    width: 200px; height: 10px; background: rgba(0,0,0,.45);
+    border-radius: 999px; overflow: hidden; z-index: 6; pointer-events: none;
+  }
+  #fever { height: 100%; width: 0%; background: linear-gradient(90deg,#ffd93d,#ff6b6b); transition: width .2s; }
+  #stage.fever::after {
+    content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 3;
+    background: linear-gradient(180deg, rgba(255,107,107,.20), rgba(255,217,61,.14));
+    animation: feverPulse .45s ease-in-out infinite alternate;
+  }
+  @keyframes feverPulse { from { opacity: .35; } to { opacity: 1; } }
+
+  /* 막판 러시: 타이머 고동 */
+  .pill.hot { background: #ff3b30 !important; animation: timePulse .5s infinite alternate; }
+  @keyframes timePulse { from { transform: scale(1); } to { transform: scale(1.18); } }
+
+  /* 폭탄 */
+  .drop.bomb { animation: bombGlow .7s ease-in-out infinite alternate; }
+  @keyframes bombGlow {
+    from { filter: drop-shadow(0 0 6px #ff3b30) drop-shadow(0 4px 8px rgba(0,0,0,.6)); }
+    to   { filter: drop-shadow(0 0 16px #ff3b30) drop-shadow(0 4px 8px rgba(0,0,0,.6)); }
+  }
   .tips { font-size: 13px; color: #9a89c4; margin-top: 16px; text-align: center; }
 
   /* 📱 모바일 최적화 */
@@ -201,8 +226,9 @@
     <div class="hud">
       <div class="pill">🍔 <span id="score">0</span></div>
       <div class="pill off" id="comboPill">🔥 x1</div>
-      <div class="pill">⏱️ <span id="time">30</span>s</div>
+      <div class="pill" id="timePill">⏱️ <span id="time">30</span>s</div>
     </div>
+    <div id="feverWrap"><div id="fever"></div></div>
 
     <div id="overlayMsg">
       <h2>햄버거 폭우 🍔</h2>
@@ -231,6 +257,8 @@ const bandEl  = document.getElementById('band');
 const scoreEl = document.getElementById('score');
 const timeEl  = document.getElementById('time');
 const comboEl = document.getElementById('comboPill');
+const feverEl = document.getElementById('fever');
+const timePill= document.getElementById('timePill');
 const overlay = document.getElementById('overlayMsg');
 const startBtn= document.getElementById('startBtn');
 
@@ -241,6 +269,7 @@ let stream = null, running = false;
 let score = 0, timeLeft = 30;
 let cooldown = 0, frame = 0;
 let streak = 0, bestStreak = 0;
+let fever = 0, feverUntil = 0;   // 피버 게이지(0~100) / 피버 종료 시각
 let drops = [];   // {el, x, y, vy, eaten, type}
 let tapMode = false;   // 카메라 불가(iframe 권한 없음/거부) 시 스페이스바/탭으로 플레이
 let camBlockReason = '';
@@ -335,7 +364,10 @@ function spawnDrop() {
   const el = document.createElement('div');
   el.className = 'drop';
   let type;
-  if (Math.random() < 0.07) { el.textContent = '⭐'; el.classList.add('gold'); type = 'gold'; }  // 황금 별 보너스
+  const feverOn = performance.now() < feverUntil;
+  if (feverOn) { el.textContent = '🍔'; type = 'good'; }                                          // 피버: 햄버거만!
+  else if (Math.random() < 0.06) { el.textContent = '💣'; el.classList.add('bomb'); type = 'bomb'; } // 폭탄 조심!
+  else if (Math.random() < 0.07) { el.textContent = '⭐'; el.classList.add('gold'); type = 'gold'; } // 황금 별 보너스
   else { const e = BURGERS[Math.random()*BURGERS.length|0]; el.textContent = e; type = (e === '🍔') ? 'good' : 'bad'; }
   const x = 8 + Math.random()*84;        // 좌우 위치 %
   el.style.left = x + '%';
@@ -346,22 +378,40 @@ function spawnDrop() {
 
 function chomp() {
   // 띠 안에 있는(아직 안 먹은) 음식을 전부 먹기 — 🍔 +, ⭐ 보너스, 나머지 -
-  let good = 0, bad = 0, gold = 0;
+  let good = 0, bad = 0, gold = 0, bombs = 0;
   for (const d of drops) {
     if (!d.eaten && d.y >= BAND_TOP && d.y <= BAND_BOT) {
       d.eaten = true;
       if (d.type === 'good') good++;
       else if (d.type === 'gold') gold++;
+      else if (d.type === 'bomb') bombs++;
       else bad++;
       d.el.classList.add('eaten');
       setTimeout(() => d.el.remove(), 350);
     }
   }
-  if (good === 0 && bad === 0 && gold === 0) return;
+  if (good === 0 && bad === 0 && gold === 0 && bombs === 0) return;
 
   const base = good + gold * 5;   // 별은 5점짜리
 
-  if (bad > 0) {
+  // 피버 게이지 충전 (피버 중엔 충전 안 함)
+  if (performance.now() >= feverUntil) {
+    fever = Math.min(100, fever + good * 12 + gold * 25);
+    if (fever >= 100) {
+      feverUntil = performance.now() + 6000;   // 🔥 6초 피버 타임!
+      fever = 0;
+      sfx('star'); shake();
+      popText('🔥 피버 타임!! 🍔🍔🍔', true);
+    }
+  }
+
+  if (bombs > 0) {
+    // 💣 폭탄! 큰 감점 + 콤보 리셋
+    streak = 0;
+    score += base - bad - bombs * 3;
+    sfx('bad'); shake(); updateCombo();
+    popText('💣 -' + (bad + bombs * 3) + '!! 콤보 터짐!', true, true);
+  } else if (bad > 0) {
     // 실수! 콤보 리셋 + 감점
     streak = 0;
     score += base - bad;
@@ -429,9 +479,14 @@ function loop() {
     return d.el.isConnected;
   });
 
-  // 스폰: 시간이 갈수록 조금씩 자주 (전체적으로 여유롭게)
-  const spawnEvery = Math.max(40, 78 - (30 - timeLeft) * 1.1);  // 78 → 40 frame
+  // 스폰: 시간이 갈수록 조금씩 자주 + 피버/막판 러시
+  const feverOn = performance.now() < feverUntil;
+  let spawnEvery = Math.max(40, 78 - (30 - timeLeft) * 1.1);  // 78 → 40 frame
+  if (timeLeft <= 5) spawnEvery = 20;   // ⏰ 막판 러시!
+  if (feverOn) spawnEvery = 9;          // 🔥 피버 타임: 햄버거 폭포
   if (frame % Math.round(spawnEvery) === 0) spawnDrop();
+  stage.classList.toggle('fever', feverOn);
+  feverEl.style.width = (feverOn ? 100 : fever) + '%';
 
   if (bite) chomp();
 
@@ -441,6 +496,7 @@ function loop() {
 function tick() {
   if (!running) return;
   timeLeft--; timeEl.textContent = timeLeft;
+  timePill.classList.toggle('hot', timeLeft <= 5 && timeLeft > 0);
   if (timeLeft <= 0) { endGame(); return; }
   setTimeout(tick, 1000);
 }
@@ -452,10 +508,16 @@ function endGame() {
   overlay.classList.remove('hidden');
   comboEl.classList.add('off');
   const grade = score >= 40 ? '🏆 전설의 대식가!' : score >= 25 ? '🔥 폭식 챔피언!' : score >= 12 ? '👍 훌륭한 먹방!' : '🙂 다음엔 더 많이!';
+  let best = 0, isNewBest = false;
+  try {
+    best = +(localStorage.getItem('burgerBest') || 0);
+    if (score > best) { isNewBest = true; best = score; localStorage.setItem('burgerBest', score); }
+  } catch (e) {}
   overlay.innerHTML =
     '<h2>⏰ 끝!</h2>' +
     '<p>최종 점수 <b style="font-size:32px;color:#ffe66d">' + score + '점</b><br>' +
-    '최고 콤보 🔥 <b>x' + Math.min(5, 1 + Math.floor(Math.max(0,bestStreak-1)/2)) + '</b> (' + bestStreak + '연속)<br>' + grade + '</p>' +
+    '최고 콤보 🔥 <b>x' + Math.min(5, 1 + Math.floor(Math.max(0,bestStreak-1)/2)) + '</b> (' + bestStreak + '연속)<br>' +
+    (isNewBest ? '✨ <b style="color:#ffd93d">신기록 달성!</b> ✨' : '최고 기록 🏆 ' + best + '점') + '<br>' + grade + '</p>' +
     '<button id="againBtn">🔄 다시 하기</button>' +
     (camPolicyBlocked ? '<a class="camtab" target="_blank" rel="noopener" href="' + location.href + '">📷 웹캠 입 인식 모드로 하려면? → 새 탭에서 열기</a>' : '');
   document.getElementById('againBtn').onclick = startGame;
@@ -469,6 +531,8 @@ async function startGame() {
   clearDrops();
   score = 0; timeLeft = 30; cooldown = 0; frame = 0; prevFrame = null;
   streak = 0; bestStreak = 0; armed = true;
+  fever = 0; feverUntil = 0; feverEl.style.width = '0%';
+  stage.classList.remove('fever'); timePill.classList.remove('hot');
   scoreEl.textContent = '0'; timeEl.textContent = '30';
   comboEl.classList.add('off');
   running = true;
